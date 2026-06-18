@@ -13,8 +13,8 @@ class ManaInsuficiente(Exception):
     # en este caso damos mas informacion utilizando los atributos personaje y cantidad_de_mana_requerida.
     def __str__(self):
         nombre_del_personaje = self.personaje.nombre
-        mana_que_necesita = self.personaje.mana
-        mana_que_tiene = self.cantidad_de_mana_requerida
+        mana_que_necesita = self.cantidad_de_mana_requerida
+        mana_que_tiene = self.personaje.mana
         return f"el personaje #{nombre_del_personaje} necesita #{mana_que_necesita}, pero tiene #{mana_que_tiene}"
 
 # En caso de que no definamos __init__, el argumento que toma una Exception y sus subclases al ser creada es un string (el mensaje)
@@ -56,6 +56,11 @@ def main():
         print("no se pudo lanzar el hechizo:", error)
     except EnemigoMuerto as error:
         print("no se pudo lanzar el hechizo:", error)
+    except ValueError:
+        print("paso algo malo")
+    # poniendo en el except a Exception, atrapo toda posible Exception y sus subclases
+    except Exception as error:
+        print(f"Ocurrio un error :( : {error})")
 
     # si nadie maneja la exception, el programa se corta en este momento,
     # con un traceback que nombra el error y apunta al raise original
