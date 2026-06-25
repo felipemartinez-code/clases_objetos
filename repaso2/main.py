@@ -1,35 +1,58 @@
+# =================================================================
+# 1. DECLARACIÓN DE ERRORES
+# =================================================================
+class SaldoInsuficienteError(Exception):
+    pass
+
+class MontoInvalidoError(Exception):
+    pass
+
+# =================================================================
+# 2. CLASES (Cuentas)
+# =================================================================
 class Cuenta:
-    def __init__(self, titular, saldo, tipo="simple", tasa=0,
-                 comision_base=0, cheques=None):
+    def __init__(self, titular, saldo):
         self.titular = titular
         self.saldo = saldo
-        self.tipo = tipo
-        self.tasa = tasa
-        self.comision_base = comision_base
-        self.cheques = cheques if cheques is not None else []
 
     def depositar(self, monto):
+        if monto <= 0:
+            raise MontoInvalidoError("El monto debe ser mayor a cero.")
         self.saldo = self.saldo + monto
 
     def extraer(self, monto):
+        if monto <= 0:
+            raise MontoInvalidoError("El monto debe ser mayor a cero.")
         if monto > self.saldo:
-            return "Error: " + self.titular + " no tiene saldo suficiente"
+            raise SaldoInsuficienteError("Fondos insuficientes.")
         self.saldo = self.saldo - monto
 
     def interes_mensual(self):
-        if self.tipo == "caja_ahorro":
-            if self.saldo >= 100000:
-                return self.saldo * self.tasa
-            return 0
-        elif self.tipo == "corriente":
-            comision = self.comision_base
-            for _ in self.cheques:
-                comision = comision + 200
-            return -comision
-        else:
-            return 0
+        return 0
 
+class CajaAhorro(Cuenta):
+    def __init__(self, titular, saldo, tasa):
+        super().__init__(titular, saldo)
+        self.tasa = tasa
 
+    def interes_mensual(self):
+        if self.saldo >= 100000:
+            return self.saldo * self.tasa
+        return 0
+
+class CuentaCorriente(Cuenta):
+    def __init__(self, titular, saldo, comision_base, cheques=None):
+        super().__init__(titular, saldo)
+        self.comision_base = comision_base
+        self.cheques = cheques if cheques is not None else []
+
+    def interes_mensual(self):
+        cantidad_cheques = len(self.cheques)
+        return -(self.comision_base + (cantidad_cheques * 200))
+
+# =================================================================
+# 3. CLASE BANCO
+# =================================================================
 class Banco:
     def __init__(self):
         self.cuentas = []
@@ -43,56 +66,71 @@ class Banco:
             suma = suma + c.saldo
         return suma
 
+    def total_intereses_del_mes(self):
+        suma_intereses = 0
+        for c in self.cuentas:
+            suma_intereses += c.interes_mensual()
+        return suma_intereses
 
-def cuentas_en_rojo(cuentas):
-    resultado = []
-    for c in cuentas:
-        if c.saldo < 0:
-            resultado.append(c)
-    return resultado
-
-
-def crear_ajuste(porcentaje):
-    def aplicar(cuenta):
-        return cuenta.saldo * (1 + porcentaje / 100)
-    return aplicar
-
-
-def todas_con_fondos(cuentas):
-    for c in cuentas:
-        if c.saldo <= 0:
-            return False
-    return True
-
-
-def hay_cuenta_rica(cuentas, tope):
-    for c in cuentas:
-        if c.saldo > tope:
-            return True
-    return False
-
-
+# =================================================================
+# 4. FUNCIONES Y CONSULTAS
+# =================================================================
 def transferir(origen, destino, monto):
-    error = origen.extraer(monto)
-    if error is not None:
-        return error
+    origen.extraer(monto)
     destino.depositar(monto)
 
+def cuentas_en_rojo(cuentas):
+    return list(filter(lambda c: c.saldo < 0, cuentas))
 
+def crear_ajuste(porcentaje):
+    return lambda c: c.saldo * (1 + porcentaje / 100)
+
+def todas_con_fondos(cuentas):
+    return all(map(lambda c: c.saldo > 0, cuentas))
+
+def hay_cuenta_rica(cuentas, tope):
+    return any(map(lambda c: c.saldo > tope, cuentas))
+
+# =================================================================
+# 5. EL MAIN (Para probar todo)
+# =================================================================
 def main():
-    ana = Cuenta("Ana", 150000, tipo="caja_ahorro", tasa=0.05)
-    beto = Cuenta("Beto", 50000, tipo="caja_ahorro", tasa=0.05)
-    caro = Cuenta("Caro", 200000, tipo="corriente",
-                  comision_base=1000, cheques=["luz", "gas"])
-    dani = Cuenta("Dani", -5000, tipo="corriente", comision_base=1000)
+    ana = CajaAhorro("Ana", 150000, tasa=0.05)
+    beto = CajaAhorro("Beto", 50000, tasa=0.05)
+    caro = CuentaCorriente("Caro", 200000, comision_base=1000, cheques=["luz", "gas"])
+    dani = CuentaCorriente("Dani", -5000, comision_base=1000)
+
+    banco = Banco()
+    banco.abrir_cuenta(ana)
+    banco.abrir_cuenta(beto)
+    banco.abrir_cuenta(caro)
+    banco.abrir_cuenta(dani)
+
+    # --- PROBANDO EXCEPCIONES ---
+    try:
+        print("Intentando que ANA extraiga 999.999")
+        ana.extraer(999999)
+    except SaldoInsuficienteError as error:
+        print("Fallo la extraccion: Saldo insuficiente")
+        
+    try:
+        print("Probando de que ana deposite -100")
+        ana.depositar(-100)
+    except MontoInvalidoError as error:
+        print("Fallo el deposito: Monto invalido")
+        
+    try:
+        print("Probando transferir sin fondos")
+        transferir(caro, ana, 300000)
+    except SaldoInsuficienteError as error:
+        print("Fallo de transferencia: Saldo insuficiente")
+
+    # --- PROBANDO CONSULTAS Y ORDEN SUPERIOR ---
+    print("\n----------------------------------")
     cuentas = [ana, beto, caro, dani]
 
     print("Interés de Ana:", ana.interes_mensual())
     print("Ajuste de Caro:", caro.interes_mensual())
-
-    banco = Banco()
-    for c in cuentas:
-        banco.abrir_cuenta(c)
     print("Patrimonio total:", banco.patrimonio_total())
 
     en_rojo = cuentas_en_rojo(cuentas)
@@ -102,22 +140,16 @@ def main():
     saldos_ajustados = []
     for c in cuentas:
         saldos_ajustados.append(con_ajuste(c))
-    print("Saldos con 10% de ajuste:", saldos_ajustados)
+    print("Saldos con 10 de ajuste:", saldos_ajustados)
 
     print("¿Todas con fondos?", todas_con_fondos(cuentas))
     print("¿Hay cuenta con más de 100000?", hay_cuenta_rica(cuentas, 100000))
 
-    # Punto 5: extraer de más
-    resultado = ana.extraer(999999)
-    if type(resultado) == str:
-        print("No se pudo extraer:", resultado)
-
-    # Punto 5: transferir
-    error = transferir(ana, beto, 50000)
-    if error is not None:
-        print("No se pudo transferir:", error)
-    print("Saldo de Ana:", ana.saldo, "- Saldo de Beto:", beto.saldo)
-
+    # --- PRINTS FINALES ---
+    print("\n----------------------------------")
+    print(f"Saldo Ana: ${ana.saldo} (Nunca le llegó la transferencia fallida de Caro)")
+    print(f"Saldo Caro: ${caro.saldo} (No se le descontó nada por fallar la transferencia)")
+    print(f"Patrimonio Total del Banco: ${banco.patrimonio_total()}")
 
 if __name__ == "__main__":
     main()
